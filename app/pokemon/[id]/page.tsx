@@ -1,5 +1,6 @@
 import { getPokemonById, generatePokemonDescription } from '@/lib/pokemon'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Markdown } from '@/components/Markdown'
 
 export default async function PokemonDetail({ params }: { params: { id: string } }) {
   const paramsAwaited = await params
@@ -38,7 +39,7 @@ export default async function PokemonDetail({ params }: { params: { id: string }
             ))}
           </ul>
           <h2 className="text-xl font-bold mt-4">Descrizione</h2>
-          <p className="mt-2">{description}</p>
+          <Markdown>{description}</Markdown>
         </CardContent>
       </Card>
     </div>

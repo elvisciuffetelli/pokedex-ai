@@ -26,7 +26,7 @@ export default function SearchForm() {
       <form onSubmit={handleSubmit} className="flex space-x-2 mb-4 items-center mt-7">
           <Input
             type="text"
-            placeholder="Cerca Pokémon..."
+            placeholder="Cerca Pokémon per nome, tipo o descrizione. Es: 'mostrami i Pokémon di tipo elettro' oppure 'mostrami i Pokémon con attacco superiore a 100'"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-grow"

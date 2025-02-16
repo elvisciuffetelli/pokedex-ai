@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { use } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { Badge } from './ui/badge'
 
 interface Pokemon {
   id: number
@@ -38,6 +39,27 @@ export default function PokemonList({ pokemonsPromise }: PokemonListProps) {
 
     const totalPages = Math.ceil(total / limit)
 
+    const typeColors: Record<string, string> = {
+        normal: 'bg-gray-400',
+        fire: 'bg-red-500',
+        water: 'bg-blue-500',
+        electric: 'bg-yellow-400',
+        grass: 'bg-green-500',
+        ice: 'bg-cyan-300',
+        fighting: 'bg-red-700',
+        poison: 'bg-purple-500',
+        ground: 'bg-yellow-700',
+        flying: 'bg-sky-400',
+        psychic: 'bg-pink-500',
+        bug: 'bg-lime-500',
+        rock: 'bg-yellow-800',
+        ghost: 'bg-indigo-700',
+        dragon: 'bg-violet-600',
+        dark: 'bg-gray-800',
+        steel: 'bg-gray-500',
+        fairy: 'bg-pink-300',
+      }
+
     return (
         <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -54,13 +76,13 @@ export default function PokemonList({ pokemonsPromise }: PokemonListProps) {
                                 className="w-full h-32 object-contain mb-2"
                             />
                             <div className="flex flex-wrap gap-2">
-                                {pokemon.types.map((type) => (
-                                    <span 
+                            {pokemon.types.map((type) => (
+                                    <Badge 
                                         key={type}
-                                        className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800"
+                                        className={`${typeColors[type.toLowerCase()] || 'bg-gray-500'} text-white`}
                                     >
                                         {type}
-                                    </span>
+                                    </Badge>
                                 ))}
                             </div>
                             </CardContent>
@@ -79,16 +101,59 @@ export default function PokemonList({ pokemonsPromise }: PokemonListProps) {
                             className={page <= 1 ? "pointer-events-none opacity-50" : ""}
                         />
                     </PaginationItem>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => (
-                        <PaginationItem key={pageNumber}>
+                    {/* Show first page */}
+                    <PaginationItem>
+                        <PaginationLink 
+                            href={`?q=${query}&page=1`}
+                            isActive={1 === page}
+                        >
+                            1
+                        </PaginationLink>
+                    </PaginationItem>
+                    
+                    {/* Show ellipsis if current page is more than 3 */}
+                    {page > 3 && (
+                        <PaginationItem>
+                            <PaginationEllipsis />
+                        </PaginationItem>
+                    )}
+
+                    {/* Show current page and surrounding pages */}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const pageNumber = Math.max(2, Math.min(page - 2, totalPages - 4)) + i;
+                        if (pageNumber > 1 && pageNumber < totalPages) {
+                            return (
+                                <PaginationItem key={pageNumber}>
+                                    <PaginationLink 
+                                        href={`?q=${query}&page=${pageNumber}`}
+                                        isActive={pageNumber === page}
+                                    >
+                                        {pageNumber}
+                                    </PaginationLink>
+                                </PaginationItem>
+                            );
+                        }
+                        return null;
+                    })}
+
+                    {/* Show ellipsis if current page is more than 3 pages from the end */}
+                    {page < totalPages - 2 && (
+                        <PaginationItem>
+                            <PaginationEllipsis />
+                        </PaginationItem>
+                    )}
+
+                    {/* Show last page if there's more than one page */}
+                    {totalPages > 1 && (
+                        <PaginationItem>
                             <PaginationLink 
-                                href={`?q=${query}&page=${pageNumber}`}
-                                isActive={pageNumber === page}
+                                href={`?q=${query}&page=${totalPages}`}
+                                isActive={totalPages === page}
                             >
-                                {pageNumber}
+                                {totalPages}
                             </PaginationLink>
                         </PaginationItem>
-                    ))}
+                    )}
                     <PaginationItem>
                         <PaginationNext 
                             href={`?q=${query}&page=${page + 1}`}

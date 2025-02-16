@@ -22,7 +22,7 @@ export default async function Home({searchParams}: Props) {
         
         <Suspense fallback={   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[...Array(3)].map((_, i) => (
-                    <div key={i} className="bg-gray-200 rounded-lg p-4 animate-pulse">
+                    <div key={i} className="bg-gray-200 rounded-lg p-4 animate-pulse mt-8">
                         <div className="bg-gray-300 h-40 w-full rounded mb-2"></div>
                         <div className="bg-gray-300 h-6 w-3/4 mb-2"></div>
                         <div className="bg-gray-300 h-4 w-1/2"></div>
