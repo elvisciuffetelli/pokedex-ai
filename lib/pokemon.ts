@@ -12,7 +12,6 @@ const openai = createOpenAI({
    apiKey: OPENAI_API_KEY
 });
 
-
 const PokemonFilterSchema = z.object({
   name: z.string().optional(),
   minAttack: z.number().optional(),
@@ -36,7 +35,7 @@ export async function searchPokemon(query: string, page: number = 1, limit: numb
   try {
     // Use LLM to interpret the query
     const { text: filterCriteria } = await generateText({
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-4-turbo-preview'),
       prompt: `Convert this Pokémon search query into filter criteria: "${query}".
         If the query mentions a specific Pokémon name, include it in the name field.
         Focus on these aspects:
@@ -102,22 +101,92 @@ export async function searchPokemon(query: string, page: number = 1, limit: numb
       }
     }
 
-    // For other searches, proceed with the regular filtering logic
-    const countResponse = await fetch('https://pokeapi.co/api/v2/pokemon');
-    const countData = await countResponse.json();
-    const totalPokemons = countData.count;
-
-    // Create a cache map for batch processing
-    const pokemonCache = new Map<string, Promise<Pokemon | null>>();
-
-    // Function to fetch individual Pokémon data
-    const fetchPokemonData = async (url: string): Promise<Pokemon | null> => {
+    // For type-based searches, use the type endpoint first
+    if (filters.types?.length === 1) {
       try {
-        const response = await fetch(url);
+        const typeResponse = await fetch(`https://pokeapi.co/api/v2/type/${filters.types[0].toLowerCase()}`);
+        if (!typeResponse.ok) {
+          throw new Error('Type not found');
+        }
+        const typeData = await typeResponse.json();
+        
+        // Get all Pokémon of this type
+        const pokemonUrls = typeData.pokemon.map((p: any) => p.pokemon.url);
+        
+        // Calculate pagination for the filtered results
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedUrls = pokemonUrls.slice(startIndex, endIndex);
+
+        // Fetch detailed data for the paginated Pokémon
+        const pokemonDataPromises = paginatedUrls.map(async (url: string) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) return null;
+            const data = await response.json();
+
+            const pokemon: Pokemon = {
+              id: data.id,
+              name: data.name,
+              types: data.types.map((type: any) => type.type.name),
+              image: data.sprites.front_default,
+              stats: data.stats.map((stat: any) => ({
+                name: stat.stat.name,
+                value: stat.base_stat,
+              })),
+            };
+
+            // Apply any additional filters
+            const stats = Object.fromEntries(
+              pokemon.stats.map(stat => [stat.name, stat.value])
+            );
+
+            if (filters.minAttack && stats.attack < filters.minAttack) return null;
+            if (filters.maxAttack && stats.attack > filters.maxAttack) return null;
+            if (filters.minDefense && stats.defense < filters.minDefense) return null;
+            if (filters.maxDefense && stats.defense > filters.maxDefense) return null;
+
+            return pokemon;
+          } catch (error) {
+            console.error(`Error fetching Pokémon data:`, error);
+            return null;
+          }
+        });
+
+        const pokemons = (await Promise.all(pokemonDataPromises)).filter((p): p is Pokemon => p !== null);
+
+        return {
+          error: null,
+          results: pokemons,
+          total: pokemonUrls.length,
+          page,
+          limit,
+          hasMore: endIndex < pokemonUrls.length
+        };
+      } catch (error) {
+        console.error('Error fetching type-based Pokémon:', error);
+      }
+    }
+
+    // Fallback to regular pagination for other searches
+    const offset = (page - 1) * limit;
+    const apiResponse = await fetch(
+      `https://pokeapi.co/api/v2/pokemon?offset=${offset}&limit=${limit}`
+    );
+    
+    if (!apiResponse.ok) {
+      throw new Error('Failed to fetch Pokémon list from PokeAPI');
+    }
+    
+    const apiData = await apiResponse.json();
+
+    const pokemonDataPromises = apiData.results.map(async (p: any) => {
+      try {
+        const response = await fetch(p.url);
         if (!response.ok) return null;
         const data = await response.json();
 
-        return {
+        const pokemon: Pokemon = {
           id: data.id,
           name: data.name,
           types: data.types.map((type: any) => type.type.name),
@@ -127,80 +196,38 @@ export async function searchPokemon(query: string, page: number = 1, limit: numb
             value: stat.base_stat,
           })),
         };
+
+        // Apply filters
+        const stats = Object.fromEntries(
+          pokemon.stats.map(stat => [stat.name, stat.value])
+        );
+
+        if (filters.minAttack && stats.attack < filters.minAttack) return null;
+        if (filters.maxAttack && stats.attack > filters.maxAttack) return null;
+        if (filters.minDefense && stats.defense < filters.minDefense) return null;
+        if (filters.maxDefense && stats.defense > filters.maxDefense) return null;
+        if (filters.types?.length && !filters.types.some(type => pokemon.types.includes(type))) return null;
+
+        return pokemon;
       } catch (error) {
         console.error(`Error fetching Pokémon data:`, error);
         return null;
       }
-    };
+    });
 
-    // Function to fetch and filter a batch of Pokémon
-    const fetchAndFilterBatch = async (offset: number, batchSize: number) => {
-      const apiResponse = await fetch(
-        `https://pokeapi.co/api/v2/pokemon?offset=${offset}&limit=${batchSize}`
-      );
-      
-      if (!apiResponse.ok) {
-        throw new Error('Failed to fetch Pokémon list from PokeAPI');
-      }
-      
-      const apiData = await apiResponse.json();
+    const pokemons = (await Promise.all(pokemonDataPromises)).filter((p): p is Pokemon => p !== null);
 
-      const pokemonDataPromises = apiData.results.map((p: any) => {
-        if (!pokemonCache.has(p.url)) {
-          pokemonCache.set(p.url, fetchPokemonData(p.url));
-        }
-        return pokemonCache.get(p.url);
-      });
-
-      const pokemons = await Promise.all(pokemonDataPromises);
-
-      return pokemons
-        .filter((pokemon): pokemon is Pokemon => pokemon !== null)
-        .filter(pokemon => {
-          if (!Object.keys(filters).length) return true;
-
-          const stats = Object.fromEntries(
-            pokemon.stats.map(stat => [stat.name, stat.value])
-          );
-
-          if (filters.minAttack && stats.attack < filters.minAttack) return false;
-          if (filters.maxAttack && stats.attack > filters.maxAttack) return false;
-          if (filters.minDefense && stats.defense < filters.minDefense) return false;
-          if (filters.maxDefense && stats.defense > filters.maxDefense) return false;
-          if (filters.types?.length && !filters.types.some(type => pokemon.types.includes(type))) return false;
-
-          return true;
-        });
-    };
-
-    // Fetch all Pokémon in batches
-    const batchSize = 100;
-    let allFilteredPokemons: Pokemon[] = [];
-    
-    const numberOfBatches = Math.ceil(totalPokemons / batchSize);
-    
-    const concurrencyLimit = 3;
-    for (let i = 0; i < numberOfBatches; i += concurrencyLimit) {
-      const batchPromises = Array.from({ length: Math.min(concurrencyLimit, numberOfBatches - i) }, (_, index) => {
-        const offset = (i + index) * batchSize;
-        return fetchAndFilterBatch(offset, batchSize);
-      });
-
-      const batchResults = await Promise.all(batchPromises);
-      allFilteredPokemons = allFilteredPokemons.concat(...batchResults);
-    }
-
-    const startIndex = (page - 1) * limit;
-    const paginatedResults = allFilteredPokemons.slice(startIndex, startIndex + limit);
-    const total = allFilteredPokemons.length;
+    // Get total count
+    const countResponse = await fetch('https://pokeapi.co/api/v2/pokemon');
+    const countData = await countResponse.json();
 
     return {
       error: null,
-      results: paginatedResults,
-      total,
+      results: pokemons,
+      total: countData.count,
       page,
       limit,
-      hasMore: total > page * limit
+      hasMore: offset + limit < countData.count
     };
 
   } catch (error) {

@@ -67,13 +67,13 @@ export default function PokemonList({ pokemonsPromise }: PokemonListProps) {
                     <Link href={`/pokemon/${pokemon.id}`} key={pokemon.id}>
                         <Card>
                             <CardHeader>
-                                <CardTitle>{pokemon.name}</CardTitle>
+                            <CardTitle>{pokemon.name.charAt(0).toUpperCase() + pokemon.name.slice(1)}</CardTitle>
                             </CardHeader>
                             <CardContent>
                             <img 
                                 src={pokemon.image} 
                                 alt={pokemon.name} 
-                                className="w-full h-32 object-contain mb-2"
+                                className="w-full h-40 object-contain mb-2"
                             />
                             <div className="flex flex-wrap gap-2">
                             {pokemon.types.map((type) => (
