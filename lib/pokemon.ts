@@ -33,31 +33,53 @@ type Pokemon = {
 
 export async function searchPokemon(query: string, page: number = 1, limit: number = 12) {
   try {
+    let filters: PokemonFilter = {};
+
+    if (query?.trim()) {
     // Use LLM to interpret the query
     const { text: filterCriteria } = await generateText({
-      model: openai('gpt-4-turbo-preview'),
-      prompt: `Convert this Pokémon search query into filter criteria: "${query}".
-        If the query mentions a specific Pokémon name, include it in the name field.
-        Focus on these aspects:
-        - Specific Pokémon name (as "name" field)
-        - Attack range (minAttack, maxAttack)
-        - Defense range (minDefense, maxDefense)
-        - Types (as array of strings)
-        Example 1: For "show me pikachu" return {"name": "pikachu"}
-        Example 2: For "mostrami pikachu" return {"name": "pikachu"}
-        Example 3: For "show me water type pokemon" return {"types": ["water"]}
-        Return only a valid JSON object with these possible fields.`,
-      system: "You are a Pokémon search query interpreter. Return only valid JSON that matches the specified format.",
-    });
+        model: openai('gpt-4o-mini'),
+        prompt: `Convert this Pokémon search query into filter criteria: "${query}".
+          If the query mentions a specific Pokémon name, include it in the name field.
+          Focus on these aspects:
+          - Specific Pokémon name (as "name" field)
+          - Attack range (minAttack, maxAttack)
+          - Defense range (minDefense, maxDefense)
+          - Types (as array of strings)
+          
+          Here are the valid Pokémon types in both English and Italian:
+          - Normal / Normale
+          - Fire / Fuoco
+          - Water / Acqua
+          - Electric / Elettro
+          - Grass / Erba
+          - Ice / Ghiaccio
+          - Fighting / Lotta
+          - Poison / Veleno
+          - Ground / Terra
+          - Flying / Volante
+          - Psychic / Psico
+          - Bug / Coleottero
+          - Rock / Roccia
+          - Ghost / Spettro
+          - Dragon / Drago
+          - Dark / Buio
+          - Steel / Acciaio
+          - Fairy / Folletto
+          
+          Example 1: For "show me pikachu" return {"name": "pikachu"}
+          Example 2: For "mostrami pokemon di tipo acqua" return {"types": ["water"]}
+          Example 3: For "cercami pokemon di tipo fuoco" return {"types": ["fire"]}
+          Return only a valid JSON object with these possible fields.`,
+        system: "You are a Pokémon search query interpreter. Return only valid JSON that matches the specified format.",
+      });
 
-    // Parse and validate the filter criteria
-    let filters: PokemonFilter;
-    try {
-      const parsedFilters = JSON.parse(filterCriteria.replace(/```json\n?|```/g, '').trim());
-      filters = PokemonFilterSchema.parse(parsedFilters);
-    } catch (error) {
-      console.error('Invalid filter criteria:', error);
-      filters = {};
+     try {
+        const parsedFilters = JSON.parse(filterCriteria.replace(/```json\n?|```/g, '').trim());
+        filters = PokemonFilterSchema.parse(parsedFilters);
+      } catch (error) {
+        console.error('Invalid filter criteria:', error);
+      }
     }
 
     // If searching for a specific Pokémon by name, use direct API endpoint
@@ -103,6 +125,7 @@ export async function searchPokemon(query: string, page: number = 1, limit: numb
 
     // For type-based searches, use the type endpoint first
     if (filters.types?.length === 1) {
+        console.log('Type-based search:', filters.types[0]);
       try {
         const typeResponse = await fetch(`https://pokeapi.co/api/v2/type/${filters.types[0].toLowerCase()}`);
         if (!typeResponse.ok) {
